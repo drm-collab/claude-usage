@@ -103,8 +103,36 @@ def get_credentials():
     return None, None
 
 
+CACHE_FILE = Path.home() / ".claude" / ".usage_cache.json"
+CACHE_TTL = 60  # seconds
+
+
+def _read_cache():
+    """Read cached usage data if fresh enough."""
+    try:
+        data = json.loads(CACHE_FILE.read_text())
+        if time.time() - data.get("_ts", 0) < CACHE_TTL:
+            return data
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    return None
+
+
+def _write_cache(data):
+    """Write usage data to cache."""
+    try:
+        data["_ts"] = time.time()
+        CACHE_FILE.write_text(json.dumps(data))
+    except OSError:
+        pass
+
+
 def fetch_usage(token):
-    """Fetch usage data from Anthropic's OAuth usage API."""
+    """Fetch usage data from Anthropic's OAuth usage API. Cached for 60s."""
+    cached = _read_cache()
+    if cached:
+        return cached
+
     try:
         resp = _safe_request(
             "https://api.anthropic.com/api/oauth/usage",
@@ -112,9 +140,15 @@ def fetch_usage(token):
             headers={"anthropic-beta": "oauth-2025-04-20", "Accept": "application/json"},
         )
         if resp:
-            return json.loads(resp.read(1_000_000))
+            data = json.loads(resp.read(1_000_000))
+            _write_cache(data)
+            return data
     except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError):
-        pass
+        # On rate limit or error, return stale cache if available
+        try:
+            return json.loads(CACHE_FILE.read_text())
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
     return None
 
 
