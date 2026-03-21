@@ -187,10 +187,11 @@ def render(usage):
     weekly_pct = round(seven.get("utilization") or 0)
     session_reset = format_time_remaining(five.get("resets_at"))
 
+    weekly_reset = format_time_remaining(seven.get("resets_at"))
+
     parts = [
-        f"S:{bar(session_pct, 8)} {session_pct}%",
-        f"W:{bar(weekly_pct, 8)} {weekly_pct}%",
-        f"⏱ {session_reset}",
+        f"S:{bar(session_pct, 8)} {session_pct}%  ⏱ {session_reset}",
+        f"W:{bar(weekly_pct, 8)} {weekly_pct}%  ⏱ {weekly_reset}",
     ]
 
     # Per-model breakdown
@@ -198,15 +199,15 @@ def render(usage):
         model = usage.get(key)
         if model and model.get("utilization"):
             util = round(model["utilization"])
-            parts.append(f"{label}:{util}%")
+            parts.append(f"{label}:{bar(util, 6)} {util}%")
 
-    # Extra credits
+    # Extra credits (API overflow)
     extra = usage.get("extra_usage", {})
     if extra and extra.get("is_enabled"):
         used = extra.get("used_credits", 0)
         limit = extra.get("monthly_limit", 0)
-        if used > 0:
-            parts.append(f"${used:.0f}/${limit}")
+        remaining = limit - used
+        parts.append(f"Credits: ${remaining:,.0f}/${limit:,.0f}")
 
     return "  ".join(parts)
 
